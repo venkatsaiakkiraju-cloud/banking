@@ -1,0 +1,50 @@
+---
+- name: Deploy SecureBank microservice
+  hosts: app_servers
+  become: yes
+  vars:
+    service_name: "{{ service_name }}"
+    image_name: "{{ image_name }}"
+    app_port: "{{ app_port }}"
+  tasks:
+    - name: Login to Nexus Docker registry
+      community.docker.docker_login:
+        registry_url: "{{ nexus_url | default('localhost:8082') }}"
+        username: "{{ nexus_user }}"
+        password: "{{ nexus_pass }}"
+      when: nexus_user is defined
+
+    - name: Pull latest image from Nexus
+      community.docker.docker_image:
+        name: "{{ image_name }}"
+        source: pull
+        force_source: yes
+
+    - name: Stop and remove existing container (if running)
+      community.docker.docker_container:
+        name: "{{ service_name }}"
+        state: absent
+
+    - name: Run new container
+      community.docker.docker_container:
+        name: "{{ service_name }}"
+        image: "{{ image_name }}"
+        state: started
+        restart_policy: unless-stopped
+        ports:
+          - "{{ app_port }}:{{ app_port }}"
+        env:
+          DB_HOST: "{{ hostvars['postgresql']['ansible_host'] | default('postgresql') }}"
+          DB_USERNAME: "{{ postgres_user }}"
+          DB_PASSWORD: "{{ postgres_password }}"
+        volumes:
+          - /var/log/securebank:/var/log/securebank
+
+    - name: Wait for application health check
+      uri:
+        url: "http://localhost:{{ app_port }}/actuator/health"
+        status_code: 200
+      register: health_result
+      until: health_result.status == 200
+      retries: 10
+      delay: 10

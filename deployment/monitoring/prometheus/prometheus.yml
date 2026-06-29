@@ -1,0 +1,70 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+rule_files:
+  - "alert_rules.yml"
+
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Spring Boot microservices (Actuator + Micrometer)
+  - job_name: 'auth-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['auth-service:8081']
+
+  - job_name: 'customer-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['customer-service:8082']
+
+  - job_name: 'account-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['account-service:8083']
+
+  - job_name: 'transaction-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['transaction-service:8084']
+
+  - job_name: 'loan-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['loan-service:8085']
+
+  - job_name: 'employee-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['employee-service:8086']
+
+  - job_name: 'notification-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['notification-service:8087']
+
+  - job_name: 'audit-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['audit-service:8088']
+
+  # Node Exporter — infrastructure-level metrics (CPU, memory, disk)
+  # On AWS EC2, replace targets with private IPs of each server
+  - job_name: 'node_exporter'
+    static_configs:
+      - targets:
+          - 'jenkins:9100'
+          - 'sonarqube:9100'
+          - 'nexus:9100'
+          - 'postgresql:9100'
+          - 'app_server_1:9100'
+          - 'app_server_2:9100'

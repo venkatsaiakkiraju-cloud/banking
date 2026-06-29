@@ -1,0 +1,51 @@
+---
+- name: Security hardening for SecureBank servers
+  hosts: app_servers,jenkins,sonarqube,nexus,postgresql,monitoring
+  become: yes
+  tasks:
+    - name: Disable password authentication for SSH
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?PasswordAuthentication'
+        line: 'PasswordAuthentication no'
+      notify: restart sshd
+
+    - name: Disable root SSH login
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?PermitRootLogin'
+        line: 'PermitRootLogin no'
+      notify: restart sshd
+
+    - name: Install UFW firewall
+      apt:
+        name: ufw
+        state: present
+
+    - name: Allow SSH only from bastion subnet
+      ufw:
+        rule: allow
+        port: '22'
+        proto: tcp
+        src: 10.0.1.0/24
+
+    - name: Enable UFW
+      ufw:
+        state: enabled
+        policy: deny
+
+    - name: Install fail2ban
+      apt:
+        name: fail2ban
+        state: present
+
+    - name: Ensure unattended-upgrades is installed (auto security patches)
+      apt:
+        name: unattended-upgrades
+        state: present
+
+  handlers:
+    - name: restart sshd
+      systemd:
+        name: sshd
+        state: restarted

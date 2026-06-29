@@ -1,0 +1,61 @@
+pipeline {
+    agent any
+    environment {
+        SERVICE_NAME = 'transaction-service'
+        IMAGE_NAME   = 'securebank-transaction'
+        IMAGE_TAG    = "1.0.${BUILD_NUMBER}"
+        NEXUS_URL    = "${NEXUS_HOST}:8082"
+        APP_PORT     = '8084'
+    }
+    tools { maven 'Maven-3.9'; jdk 'JDK-17' }
+    stages {
+        stage('Checkout')   { steps { checkout scm } }
+        stage('Compile')    { steps { dir("${SERVICE_NAME}") { sh 'mvn clean compile -B' } } }
+        stage('Unit Test')  {
+            steps { dir("${SERVICE_NAME}") { sh 'mvn test -B' } }
+            post  { always { junit allowEmptyResults: true, testResults: "${SERVICE_NAME}/target/surefire-reports/*.xml" } }
+        }
+        stage('SonarQube Scan') {
+            steps { dir("${SERVICE_NAME}") { withSonarQubeEnv('SonarQube') {
+                sh "mvn sonar:sonar -Dsonar.projectKey=securebank-transaction -B"
+            }}}
+        }
+        stage('Quality Gate') { steps { timeout(time:5,unit:'MINUTES') { waitForQualityGate abortPipeline: true } } }
+        stage('Package JAR')  {
+            steps { dir("${SERVICE_NAME}") { sh 'mvn package -DskipTests -B'; archiveArtifacts artifacts:'target/*.jar', fingerprint:true } }
+        }
+        stage('Upload Nexus') {
+            steps { dir("${SERVICE_NAME}") {
+                nexusArtifactUploader(
+                    nexusVersion:'nexus3', protocol:'http', nexusUrl:"${NEXUS_HOST}:8081",
+                    groupId:'com.securebank', version:"${IMAGE_TAG}",
+                    repository:'securebank-releases', credentialsId:'nexus-credentials',
+                    artifacts:[[artifactId:"${SERVICE_NAME}", classifier:'', file:"target/${SERVICE_NAME}-1.0.0.jar", type:'jar']]
+                )
+            }}
+        }
+        stage('Docker Build') { steps { dir("${SERVICE_NAME}") { sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} -t ${IMAGE_NAME}:latest ." } } }
+        stage('Docker Push')  {
+            steps { withCredentials([usernamePassword(credentialsId:'nexus-credentials',usernameVariable:'NUSER',passwordVariable:'NPASS')]) {
+                sh """
+                    docker login ${NEXUS_URL} -u ${NUSER} -p ${NPASS}
+                    docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${NEXUS_URL}/${IMAGE_NAME}:${IMAGE_TAG}
+                    docker push ${NEXUS_URL}/${IMAGE_NAME}:${IMAGE_TAG}
+                """
+            }}
+        }
+        stage('Deploy Ansible') {
+            steps { withCredentials([usernamePassword(credentialsId:'nexus-credentials',usernameVariable:'NUSER',passwordVariable:'NPASS')]) {
+                sh "ansible-playbook deployment/ansible/playbooks/deploy_application.yml -i deployment/ansible/inventory/hosts.ini --extra-vars 'service_name=${SERVICE_NAME} image_name=${NEXUS_URL}/${IMAGE_NAME}:${IMAGE_TAG} app_port=${APP_PORT}'"
+            }}
+        }
+        stage('Health Check') {
+            steps { retry(5) { sleep(time:15,unit:'SECONDS'); sh "curl -sf http://${APP_SERVER_1}:${APP_PORT}/actuator/health | grep UP" } }
+        }
+    }
+    post {
+        success { echo "SUCCESS: ${SERVICE_NAME} v${IMAGE_TAG} deployed!" }
+        failure { echo "FAILED:  ${SERVICE_NAME} deployment failed." }
+        always  { cleanWs() }
+    }
+}

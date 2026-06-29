@@ -1,0 +1,27 @@
+{
+  "folders": [
+    { "path": "." }
+  ],
+  "settings": {
+    "java.configuration.updateBuildConfiguration": "automatic",
+    "files.exclude": {
+      "**/target": true,
+      "**/.git": true
+    },
+    "editor.formatOnSave": false,
+    "java.compile.nullAnalysis.mode": "automatic"
+  },
+  "extensions": {
+    "recommendations": [
+      "vscjava.vscode-java-pack",
+      "pivotal.vscode-spring-boot",
+      "vscjava.vscode-spring-initializr",
+      "vscjava.vscode-spring-boot-dashboard",
+      "ms-azuretools.vscode-docker",
+      "redhat.vscode-yaml",
+      "redhat.ansible",
+      "mtxr.sqltools",
+      "mtxr.sqltools-driver-pg"
+    ]
+  }
+}

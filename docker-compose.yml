@@ -1,0 +1,201 @@
+version: "3.8"
+
+# SecureBank Platform - Full Local Stack
+# Run with: docker-compose up -d --build
+# This lets you test ALL microservices + PostgreSQL + Monitoring locally
+# before deploying to AWS EC2.
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: securebank-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: securebank
+      POSTGRES_USER: securebank
+      POSTGRES_PASSWORD: securebank123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/02_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
+      - ./database/03_seed_data.sql:/docker-entrypoint-initdb.d/02_seed.sql
+    networks:
+      - securebank-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U securebank"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  auth-service:
+    build: ./auth-service
+    container_name: auth-service
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      DB_HOST: postgres
+      DB_USERNAME: securebank
+      DB_PASSWORD: securebank123
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - securebank-net
+
+  customer-service:
+    build: ./customer-service
+    container_name: customer-service
+    restart: unless-stopped
+    ports:
+      - "8082:8082"
+    environment:
+      DB_HOST: postgres
+      DB_USERNAME: securebank
+      DB_PASSWORD: securebank123
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - securebank-net
+
+  account-service:
+    build: ./account-service
+    container_name: account-service
+    restart: unless-stopped
+    ports:
+      - "8083:8083"
+    environment:
+      DB_HOST: postgres
+      DB_USERNAME: securebank
+      DB_PASSWORD: securebank123
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - securebank-net
+
+  transaction-service:
+    build: ./transaction-service
+    container_name: transaction-service
+    restart: unless-stopped
+    ports:
+      - "8084:8084"
+    environment:
+      DB_HOST: postgres
+      DB_USERNAME: securebank
+      DB_PASSWORD: securebank123
+      ACCOUNT_SERVICE_URL: http://account-service:8083
+    depends_on:
+      postgres:
+        condition: service_healthy
+      account-service:
+        condition: service_started
+    networks:
+      - securebank-net
+
+  loan-service:
+    build: ./loan-service
+    container_name: loan-service
+    restart: unless-stopped
+    ports:
+      - "8085:8085"
+    environment:
+      DB_HOST: postgres
+      DB_USERNAME: securebank
+      DB_PASSWORD: securebank123
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - securebank-net
+
+  employee-service:
+    build: ./employee-service
+    container_name: employee-service
+    restart: unless-stopped
+    ports:
+      - "8086:8086"
+    environment:
+      DB_HOST: postgres
+      DB_USERNAME: securebank
+      DB_PASSWORD: securebank123
+      CUSTOMER_SERVICE_URL: http://customer-service:8082
+      ACCOUNT_SERVICE_URL: http://account-service:8083
+      LOAN_SERVICE_URL: http://loan-service:8085
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - securebank-net
+
+  notification-service:
+    build: ./notification-service
+    container_name: notification-service
+    restart: unless-stopped
+    ports:
+      - "8087:8087"
+    environment:
+      DB_HOST: postgres
+      DB_USERNAME: securebank
+      DB_PASSWORD: securebank123
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - securebank-net
+
+  audit-service:
+    build: ./audit-service
+    container_name: audit-service
+    restart: unless-stopped
+    ports:
+      - "8088:8088"
+    environment:
+      DB_HOST: postgres
+      DB_USERNAME: securebank
+      DB_PASSWORD: securebank123
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - securebank-net
+
+  # ===== Monitoring Stack =====
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./deployment/monitoring/prometheus:/etc/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    networks:
+      - securebank-net
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin123
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./deployment/monitoring/grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      - prometheus
+    networks:
+      - securebank-net
+
+networks:
+  securebank-net:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  grafana_data:

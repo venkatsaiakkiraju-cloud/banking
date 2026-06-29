@@ -1,0 +1,39 @@
+---
+- name: Rollback SecureBank microservice to previous version
+  hosts: app_servers
+  become: yes
+  vars:
+    service_name: "{{ service_name }}"
+    previous_image_tag: "{{ previous_image_tag }}"
+    image_base: "{{ image_base }}"
+  tasks:
+    - name: Stop current (failing) container
+      community.docker.docker_container:
+        name: "{{ service_name }}"
+        state: absent
+
+    - name: Pull previous stable image
+      community.docker.docker_image:
+        name: "{{ image_base }}:{{ previous_image_tag }}"
+        source: pull
+
+    - name: Start container with previous stable image
+      community.docker.docker_container:
+        name: "{{ service_name }}"
+        image: "{{ image_base }}:{{ previous_image_tag }}"
+        state: started
+        restart_policy: unless-stopped
+        ports:
+          - "{{ app_port }}:{{ app_port }}"
+
+    - name: Verify rollback health
+      uri:
+        url: "http://localhost:{{ app_port }}/actuator/health"
+        status_code: 200
+      register: health_result
+      until: health_result.status == 200
+      retries: 10
+      delay: 10
+
+    - debug:
+        msg: "Rollback complete: {{ service_name }} restored to {{ previous_image_tag }}"
