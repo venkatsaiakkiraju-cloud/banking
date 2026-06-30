@@ -2,23 +2,34 @@
 pipeline {
     agent any
 
+    tools {
+        maven 'Maven'
+    }
+
     stages {
+
         stage('Checkout') {
             steps {
-                echo 'Source code checked out successfully.'
+                git branch: 'main', url: 'https://github.com/venkatsaiakkiraju-cloud/banking.git'
             }
         }
 
-        stage('Build') {
+        stage('Build Customer Service') {
             steps {
-                echo 'Build completed successfully.'
+                dir('customer-service') {
+                    sh 'mvn clean package'
+                }
             }
         }
+    }
 
-        stage('Test') {
-            steps {
-                echo 'Tests executed successfully.'
-            }
+    post {
+        success {
+            echo 'Customer Service Build Successful!'
+        }
+
+        failure {
+            echo 'Build Failed!'
         }
     }
 }
