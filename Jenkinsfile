@@ -1,4 +1,3 @@
-
 pipeline {
     agent any
 
@@ -21,15 +20,20 @@ pipeline {
                 }
             }
         }
+
+        stage('Verify Build') {
+            steps {
+                sh 'ls -l customer-service/target'
+            }
+        }
     }
 
     post {
         success {
-            echo 'Customer Service Build Successful!'
+            echo 'Customer Service Build Completed Successfully!'
         }
-
         failure {
-            echo 'Build Failed!'
+            echo 'Customer Service Build Failed!'
         }
     }
 }
